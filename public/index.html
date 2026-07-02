@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<title>Shopee → Pinterest Auto Poster</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { --accent:#e60023; --bg:#0f1115; --card:#171a21; --text:#f2f2f2; --muted:#9aa0a6; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); margin:0; padding:24px; }
+  .wrap { max-width:640px; margin:0 auto; }
+  h1 { font-size:20px; margin-bottom:4px; }
+  p.sub { color:var(--muted); margin-top:0; font-size:14px; }
+  .card { background:var(--card); border-radius:12px; padding:20px; margin-bottom:16px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:12px 0 6px; }
+  input, textarea, select { width:100%; padding:10px; border-radius:8px; border:1px solid #2a2e37; background:#0f1115; color:var(--text); font-size:14px; }
+  textarea { min-height:90px; resize:vertical; }
+  button { background:var(--accent); color:#fff; border:none; padding:11px 18px; border-radius:24px; font-weight:600; cursor:pointer; font-size:14px; }
+  button.secondary { background:#2a2e37; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:10px; }
+  .row > * { flex:1; }
+  img.preview { max-width:100%; border-radius:8px; margin-top:10px; }
+  .badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:12px; }
+  .badge.pending { background:#3a2f00; color:#ffd666; }
+  .badge.posted { background:#0f3d1f; color:#79e08b; }
+  .badge.failed { background:#3d0f0f; color:#ff8080; }
+  .list-item { border-top:1px solid #2a2e37; padding:10px 0; font-size:13px; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .connect-banner { display:flex; justify-content:space-between; align-items:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🛍️ Shopee → 📌 Pinterest Auto Poster</h1>
+  <p class="sub">Generate gambar + caption dari link affiliate Shopee, lalu auto-schedule ke Pinterest pakai API resmi.</p>
+
+  <div class="card connect-banner">
+    <div id="connectStatus">Mengecek koneksi Pinterest...</div>
+    <a href="/auth/pinterest"><button id="connectBtn">Connect Pinterest</button></a>
+  </div>
+
+  <div class="card">
+    <label>Link Affiliate Shopee</label>
+    <input id="shopeeLink" placeholder="https://shope.ee/xxxxx" />
+
+    <label>Judul Produk (buat generate caption & fallback kalau scraping gagal)</label>
+    <input id="titleInput" placeholder="Contoh: Serum Wajah Glow Instant 30ml" />
+
+    <button id="generateBtn">✨ Generate Gambar & Caption</button>
+
+    <div id="previewArea" style="display:none; margin-top:16px;">
+      <label>Preview Gambar</label>
+      <img id="previewImg" class="preview" />
+      <label>Kalau scraping gambar gagal, upload manual (image URL):</label>
+      <input id="manualImageUrl" placeholder="https://..." />
+
+      <label>Caption (bisa diedit)</label>
+      <textarea id="captionText"></textarea>
+
+      <label>Board Pinterest</label>
+      <select id="boardSelect"></select>
+
+      <label>Jadwal Posting</label>
+      <input id="scheduleAt" type="datetime-local" />
+
+      <div style="margin-top:14px;">
+        <button id="scheduleBtn">📅 Jadwalkan Post</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">Antrian Jadwal</h3>
+    <div id="scheduleList"></div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let currentImage = null;
+
+async function checkStatus() {
+  const r = await fetch("/api/status");
+  const data = await r.json();
+  $("connectStatus").textContent = data.connected ? "✅ Pinterest terkoneksi" : "⚠️ Belum connect Pinterest";
+  $("connectBtn").style.display = data.connected ? "none" : "inline-block";
+  if (data.connected) loadBoards();
+}
+
+async function loadBoards() {
+  const r = await fetch("/api/boards");
+  if (!r.ok) return;
+  const boards = await r.json();
+  $("boardSelect").innerHTML = boards.map(b => `<option value="${b.id}">${b.name}</option>`).join("");
+}
+
+$("generateBtn").onclick = async () => {
+  const shopeeLink = $("shopeeLink").value.trim();
+  const title = $("titleInput").value.trim();
+  if (!shopeeLink) return alert("Isi link Shopee dulu bro");
+
+  $("generateBtn").disabled = true;
+  $("generateBtn").textContent = "Generating...";
+
+  try {
+    const r = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shopeeLink, title }),
+    });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+
+    currentImage = data.image;
+    $("previewImg").src = data.image || "";
+    $("previewImg").style.display = data.image ? "block" : "none";
+    $("captionText").value = data.caption || "";
+    $("previewArea").style.display = "block";
+  } catch (e) {
+    alert("Gagal generate: " + e.message);
+  } finally {
+    $("generateBtn").disabled = false;
+    $("generateBtn").textContent = "✨ Generate Gambar & Caption";
+  }
+};
+
+$("scheduleBtn").onclick = async () => {
+  const imageUrl = $("manualImageUrl").value.trim() || currentImage;
+  const boardId = $("boardSelect").value;
+  const scheduledAt = $("scheduleAt").value;
+  if (!imageUrl) return alert("Gambar wajib ada (scraping gagal? isi manual image URL)");
+  if (!boardId) return alert("Pilih board dulu / connect Pinterest dulu");
+  if (!scheduledAt) return alert("Isi jadwal posting");
+
+  const body = {
+    boardId,
+    title: $("titleInput").value.trim(),
+    caption: $("captionText").value.trim(),
+    link: $("shopeeLink").value.trim(),
+    imageUrl,
+    scheduledAt: new Date(scheduledAt).toISOString(),
+  };
+
+  const r = await fetch("/api/schedule", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await r.json();
+  if (data.error) return alert(data.error);
+  alert("Terjadwal! ✅");
+  loadSchedule();
+};
+
+async function loadSchedule() {
+  const r = await fetch("/api/schedule");
+  const list = await r.json();
+  $("scheduleList").innerHTML = list
+    .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
+    .map(
+      (p) => `
+      <div class="list-item">
+        <div>
+          <div><strong>${p.title || "(tanpa judul)"}</strong></div>
+          <div style="color:var(--muted)">${new Date(p.scheduledAt).toLocaleString("id-ID")}</div>
+        </div>
+        <div>
+          <span class="badge ${p.status}">${p.status}</span>
+          <button class="secondary" onclick="deletePost('${p.id}')">Hapus</button>
+        </div>
+      </div>`
+    )
+    .join("") || '<p style="color:var(--muted)">Belum ada jadwal.</p>';
+}
+
+async function deletePost(id) {
+  await fetch("/api/schedule/" + id, { method: "DELETE" });
+  loadSchedule();
+}
+
+checkStatus();
+loadSchedule();
+setInterval(loadSchedule, 15000);
+</script>
+</body>
+</html>
