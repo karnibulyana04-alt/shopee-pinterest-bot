@@ -1,14 +1,15 @@
-const axios = require("axios");
+const axios = require('axios');
 
 /**
  * Generate caption Pinterest gaya storytelling + CTA klik link,
- * pakai Claude API (Anthropic).
+ * pakai Google Gemini API (GRATIS, gak perlu kartu kredit).
+ * Dapetin API key di: https://aistudio.google.com/apikey
  */
 async function generateCaption({ title, description, affiliateLink }) {
   const prompt = `Kamu adalah content writer Pinterest yang ahli bikin caption storytelling untuk affiliate marketing.
 
 Produk: "${title}"
-Deskripsi tambahan: "${description || "-"}"
+Deskripsi tambahan: "${description || '-'}"
 
 Tulis 1 caption Pinterest (bahasa Indonesia, santai tapi persuasif) dengan struktur:
 1. Kalimat pembuka yang relate / bikin penasaran (pengalaman pribadi singkat atau masalah yang relate)
@@ -21,23 +22,17 @@ Panjang total maksimal 400 karakter (limit Pinterest description). Jangan pakai 
 Balas HANYA dengan teks captionnya saja, tanpa penjelasan tambahan.`;
 
   const response = await axios.post(
-    "https://api.anthropic.com/v1/messages",
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
     {
-      model: "claude-sonnet-4-6",
-      max_tokens: 400,
-      messages: [{ role: "user", content: prompt }],
+      contents: [{ parts: [{ text: prompt }] }],
     },
     {
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
+      headers: { 'content-type': 'application/json' },
     }
   );
 
-  const textBlock = response.data.content.find((c) => c.type === "text");
-  return textBlock ? textBlock.text.trim() : "";
+  const text = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
+  return text ? text.trim() : '';
 }
 
 module.exports = { generateCaption };
