@@ -175,5 +175,8 @@ async function ensureFreshToken() {
 }
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server jalan di ${process.env.BASE_URL || `http://localhost:${PORT}`}`);
+  const key = process.env.GEMINI_API_KEY || "";
+  console.log(
+    `🔑 GEMINI_API_KEY check → length: ${key.length}, starts: "${key.slice(0, 6)}", ends: "${key.slice(-6)}"`
+  );`);
 });
