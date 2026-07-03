@@ -1,27 +1,27 @@
-require("dotenv").config();
-const express = require("express");
-const { nanoid } = require("nanoid");
+require('dotenv').config();
+const express = require('express');
+const { nanoid } = require('nanoid');
 
-const { scrapeShopeeProduct } = require("./services/shopeeScraper");
-const { generateCaption } = require("./services/captionGenerator");
+const { scrapeShopeeProduct } = require('./services/shopeeScraper');
+const { generateCaption } = require('./services/captionGenerator');
 const {
   exchangeCodeForToken,
   refreshToken,
   listBoards,
   createPin,
-} = require("./services/pinterest");
-const db = require("./services/db");
+} = require('./services/pinterest');
+const db = require('./services/db');
 
 const app = express();
 app.use(express.json());
-app.use(express.static("public"));
+app.use(express.static('public'));
 
 const PORT = process.env.PORT || 3000;
 
 // ---------- 1. PINTEREST OAUTH ----------
 
-app.get("/auth/pinterest", (req, res) => {
-  const scopes = ["boards:read", "pins:read", "pins:write"].join(",");
+app.get('/auth/pinterest', (req, res) => {
+  const scopes = ['boards:read', 'pins:read', 'pins:write'].join(',');
   const url =
     `https://www.pinterest.com/oauth/?` +
     `client_id=${process.env.PINTEREST_APP_ID}` +
@@ -30,53 +30,58 @@ app.get("/auth/pinterest", (req, res) => {
   res.redirect(url);
 });
 
-app.get("/auth/pinterest/callback", async (req, res) => {
+app.get('/auth/pinterest/callback', async (req, res) => {
   try {
     const { code } = req.query;
     const tokenData = await exchangeCodeForToken(code);
-    db.set("tokens", {
+    db.set('tokens', {
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
       obtained_at: Date.now(),
       expires_in: tokenData.expires_in,
     }).write();
-    res.redirect("/?connected=1");
+    res.redirect('/?connected=1');
   } catch (err) {
     console.error(err.response?.data || err.message);
-    res.status(500).send("Gagal konek ke Pinterest. Cek console server.");
+    res.status(500).send('Gagal konek ke Pinterest. Cek console server.');
   }
 });
 
-app.get("/api/status", (req, res) => {
-  const tokens = db.get("tokens").value();
+app.get('/api/status', (req, res) => {
+  const tokens = db.get('tokens').value();
   res.json({ connected: !!tokens });
 });
 
-app.get("/api/boards", async (req, res) => {
+app.get('/api/boards', async (req, res) => {
   try {
-    const tokens = db.get("tokens").value();
-    if (!tokens) return res.status(401).json({ error: "Belum connect Pinterest" });
+    const tokens = db.get('tokens').value();
+    if (!tokens)
+      return res.status(401).json({ error: 'Belum connect Pinterest' });
     const boards = await listBoards(tokens.access_token);
     res.json(boards);
   } catch (err) {
     console.error(err.response?.data || err.message);
-    res.status(500).json({ error: "Gagal ambil boards" });
+    res.status(500).json({ error: 'Gagal ambil boards' });
   }
 });
 
 // ---------- 2. GENERATE (scrape Shopee + AI caption) ----------
 
-app.post("/api/generate", async (req, res) => {
+app.post('/api/generate', async (req, res) => {
   try {
     const { shopeeLink, title: userTitle } = req.body;
-    if (!shopeeLink) return res.status(400).json({ error: "shopeeLink wajib diisi" });
+    if (!shopeeLink)
+      return res.status(400).json({ error: 'shopeeLink wajib diisi' });
 
     let product = { image: null, title: userTitle, description: null };
     try {
       product = await scrapeShopeeProduct(shopeeLink);
       if (!product.title) product.title = userTitle;
     } catch (e) {
-      console.warn("Scrape Shopee gagal, pakai fallback title dari user:", e.message);
+      console.warn(
+        'Scrape Shopee gagal, pakai fallback title dari user:',
+        e.message
+      );
     }
 
     const caption = await generateCaption({
@@ -92,21 +97,24 @@ app.post("/api/generate", async (req, res) => {
     });
   } catch (err) {
     console.error(err.response?.data || err.message);
-    res.status(500).json({ error: "Gagal generate konten" });
+    res.status(500).json({ error: 'Gagal generate konten' });
   }
 });
 
 // ---------- 3. SCHEDULE ----------
 
-app.post("/api/schedule", async (req, res) => {
+app.post('/api/schedule', async (req, res) => {
   const { boardId, title, caption, link, imageUrl, scheduledAt } = req.body;
   if (!boardId || !imageUrl || !scheduledAt) {
-    return res.status(400).json({ error: "boardId, imageUrl, scheduledAt wajib diisi" });
+    return res
+      .status(400)
+      .json({ error: 'boardId, imageUrl, scheduledAt wajib diisi' });
   }
 
   try {
     const accessToken = await ensureFreshToken();
-    if (!accessToken) return res.status(401).json({ error: "Belum connect Pinterest" });
+    if (!accessToken)
+      return res.status(401).json({ error: 'Belum connect Pinterest' });
 
     // Kirim langsung ke Pinterest dengan publish_at -- Pinterest sendiri yang
     // nyimpen & publish di waktu tsb, gak perlu server kita nyala terus.
@@ -128,24 +136,24 @@ app.post("/api/schedule", async (req, res) => {
       link,
       imageUrl,
       scheduledAt,
-      status: "scheduled_on_pinterest",
+      status: 'scheduled_on_pinterest',
       createdAt: new Date().toISOString(),
     };
 
-    db.get("scheduledPosts").push(post).write();
+    db.get('scheduledPosts').push(post).write();
     res.json({ ok: true, post });
   } catch (err) {
     console.error(err.response?.data || err.message);
-    res.status(500).json({ error: "Gagal jadwalkan ke Pinterest" });
+    res.status(500).json({ error: 'Gagal jadwalkan ke Pinterest' });
   }
 });
 
-app.get("/api/schedule", (req, res) => {
-  res.json(db.get("scheduledPosts").value());
+app.get('/api/schedule', (req, res) => {
+  res.json(db.get('scheduledPosts').value());
 });
 
-app.delete("/api/schedule/:id", (req, res) => {
-  db.get("scheduledPosts").remove({ id: req.params.id }).write();
+app.delete('/api/schedule/:id', (req, res) => {
+  db.get('scheduledPosts').remove({ id: req.params.id }).write();
   res.json({ ok: true });
 });
 
@@ -154,7 +162,7 @@ app.delete("/api/schedule/:id", (req, res) => {
 // jadi gak perlu cron sendiri buat publish di waktu terjadwal.
 
 async function ensureFreshToken() {
-  const tokens = db.get("tokens").value();
+  const tokens = db.get('tokens').value();
   if (!tokens) return null;
 
   const isExpiringSoon =
@@ -168,15 +176,18 @@ async function ensureFreshToken() {
       obtained_at: Date.now(),
       expires_in: fresh.expires_in,
     };
-    db.set("tokens", updated).write();
+    db.set('tokens', updated).write();
     return updated.access_token;
   }
   return tokens.access_token;
 }
 
 app.listen(PORT, () => {
-  const key = process.env.GEMINI_API_KEY || "";
+  const key = process.env.GEMINI_API_KEY || '';
   console.log(
     `🔑 GEMINI_API_KEY check → length: ${key.length}, starts: "${key.slice(0, 6)}", ends: "${key.slice(-6)}"`
-  );`);
+  );
+  console.log(
+    `🚀 Server jalan di ${process.env.BASE_URL || `http://localhost:${PORT}`}`
+  );
 });
