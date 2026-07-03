@@ -1,4 +1,4 @@
-const axios = require("axios");
+const axios = require('axios');
 
 /**
  * Generate caption Pinterest gaya storytelling + CTA klik link,
@@ -9,7 +9,7 @@ async function generateCaption({ title, description, affiliateLink }) {
   const prompt = `Kamu adalah content writer Pinterest yang ahli bikin caption storytelling untuk affiliate marketing.
 
 Produk: "${title}"
-Deskripsi tambahan: "${description || "-"}"
+Deskripsi tambahan: "${description || '-'}"
 
 Tulis 1 caption Pinterest (bahasa Indonesia, santai tapi persuasif) dengan struktur:
 1. Kalimat pembuka yang relate / bikin penasaran (pengalaman pribadi singkat atau masalah yang relate)
@@ -22,17 +22,21 @@ Panjang total maksimal 400 karakter (limit Pinterest description). Jangan pakai 
 Balas HANYA dengan teks captionnya saja, tanpa penjelasan tambahan.`;
 
   const response = await axios.post(
-    "https://api.groq.com/openai/v1/chat/completions",
+    'https://api.groq.com/openai/v1/chat/completions',
     {
-      model: "llama-3.3-70b-versatile",
-      messages: [{ role: "user", content: prompt }],
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
     },
     {
       headers: {
-        "content-type": "application/json",
+        'content-type': 'application/json',
         Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
       },
     }
   );
 
   const text = response.data.choices?.[0]?.message?.content;
+  return text ? text.trim() : '';
+}
+
+module.exports = { generateCaption };
