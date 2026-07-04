@@ -1,69 +1,82 @@
-# Shopee → Pinterest Auto Poster
+# Shopee → Pinterest Auto Poster (via Make.com)
 
-Web app untuk generate gambar + caption dari link affiliate Shopee, lalu **auto-schedule posting ke Pinterest pakai API resmi** (bukan bot/simulasi klik, jadi aman dari suspensi akun).
+Web app buat generate gambar + caption dari link affiliate Shopee, lalu jadwalkan posting ke Pinterest — postingnya dieksekusi lewat **Make.com** (jadi gak perlu bikin App Pinterest sendiri / nunggu approval berminggu-minggu).
 
-## ⚠️ Kenapa bukan Chrome Extension?
-Kalau cuma generate gambar/caption doang, extension bisa aja. Tapi biar rapi dan gampang di-maintain, ini dibuat sebagai web app kecil yang bisa lo akses dari browser mana aja.
+## Kenapa lewat Make.com?
 
-## 📅 Soal Scheduling
-App ini pakai **native scheduling Pinterest** — pas lo klik "Jadwalkan Post", request langsung dikirim ke Pinterest dengan parameter `publish_at` (format ISO 8601). Pinterest sendiri yang nyimpen & publish di waktu itu, jadi:
-- Server kamu **gak perlu nyala 24/7** menunggu jadwal — cukup nyala pas kamu generate & submit jadwal
-- Kalau server mati setelah jadwal disubmit, pin tetap terpublish sesuai waktu (karena udah "dititipkan" ke Pinterest)
-- Gak ada limit jumlah post di sisi app ini — 10 post/hari x 7 hari (70 post) sama sekali gak masalah, jauh di bawah rate limit Pinterest (Trial access: 1000 request/hari; Standard access: 100 request/detik)
+Bikin App Pinterest sendiri butuh approval Trial + Standard access dari Pinterest yang bisa makan waktu lama. Make.com udah punya app Pinterest yang lama disetujui Pinterest — jadi kamu tinggal **connect akun Pinterest kamu ke Make.com** (OAuth biasa, langsung approve, gak nunggu apa-apa), dan app kita tinggal "nitip" data ke Make.com lewat Webhook.
 
-## 🧱 Yang TIDAK dilakukan app ini (dan kenapa)
-- **Tidak** scraping gambar dari Instagram/Threads/Facebook orang lain — itu pelanggaran hak cipta & ToS platform tsb.
-- **Tidak** auto-klik/simulasi browser di Pinterest — pakai Pinterest API resmi (v5) supaya akun lo gak keflag sebagai bot.
-- Gambar diambil dari foto produk Shopee sendiri (legal karena itu produk yang lo affiliate-in), dan bisa kamu ganti manual/AI-generate kapan aja.
+## Alur kerja
 
-## 🚀 Setup
+1. App kita generate gambar + caption dari link Shopee
+2. Kamu isi nama board Pinterest + jadwal (tanggal & jam)
+3. Data disimpan di app kita
+4. Setiap menit, app kita cek jadwal yang udah waktunya
+5. Kalau udah waktunya, app kita kirim data itu ke **Webhook Make.com**
+6. Make.com yang eksekusi "Create Pin" ke akun Pinterest kamu (pakai koneksi yang udah di-setup di Make.com)
+
+## Setup
 
 ### 1. Install dependencies
+
 ```bash
 npm install
 ```
 
-### 2. Daftar Pinterest App
-1. Buka https://developers.pinterest.com/apps/ → **Create app**
-2. Catat **App ID** dan **App secret**
-3. Di bagian Redirect URIs, tambahkan: `http://localhost:3000/auth/pinterest/callback` (untuk local testing) — nanti ganti ke domain production kamu.
-4. Ajukan scope: `boards:read`, `pins:read`, `pins:write` (untuk trial access biasanya langsung aktif, untuk skala besar perlu app review Pinterest).
+### 2. Bikin scenario di Make.com
 
-### 3. Siapkan Anthropic API Key (buat generate caption)
-Ambil di https://console.anthropic.com
+1. Daftar gratis di https://www.make.com
+2. Bikin **Scenario** baru
+3. Module pertama: **Webhooks → Custom webhook** → bikin webhook baru, copy URL-nya
+4. Module kedua: cari app **Pinterest** → pilih action **Create a Pin**
+5. Connect akun Pinterest kamu (klik Add, login, authorize — ini OAuth resmi, langsung jadi, gak nunggu approval apapun)
+6. Di form Create a Pin, map field-fieldnya ke data dari Webhook:
+   - Board → pilih berdasarkan `board_name` dari webhook (atau map manual ke board tertentu)
+   - Title → `title`
+   - Description → `description`
+   - Link → `link`
+   - Media/Image URL → `image_url`
+7. Klik **Save**, aktifkan scenario-nya (toggle ON di pojok kiri bawah)
+
+### 3. Siapin Groq API Key (GRATIS, buat generate caption)
+
+1. Buka https://console.groq.com/keys
+2. Daftar/login (gak perlu kartu kredit)
+3. Klik **Create API Key** → copy key-nya
 
 ### 4. Copy & isi environment variable
+
 ```bash
 cp .env.example .env
 ```
-Isi `PINTEREST_APP_ID`, `PINTEREST_APP_SECRET`, `ANTHROPIC_API_KEY`, dll sesuai punya kamu.
+
+Isi `GROQ_API_KEY` dan `MAKE_WEBHOOK_URL` (dari step 2).
 
 ### 5. Jalankan
+
 ```bash
 npm start
 ```
-Buka `http://localhost:3000`, klik **Connect Pinterest**, login & authorize.
 
-## 📋 Cara Pakai
+Buka `http://localhost:3000`.
+
+## Cara Pakai
+
 1. Paste link affiliate Shopee + judul produk
-2. Klik **Generate Gambar & Caption** → sistem ambil foto produk dari Shopee + AI bikin caption storytelling
-3. Kalau gambar gagal ke-scrape, isi manual (upload ke imgur/cloudinary/dst dulu, paste URL-nya)
-4. Pilih board Pinterest & jadwal tanggal/jam posting
-5. Klik **Jadwalkan Post** → sistem otomatis publish pas waktunya lewat cron job tiap menit
+2. Klik **Generate Gambar & Caption**
+3. Kalau gambar gagal ke-scrape, isi manual (klik kanan gambar produk di Shopee → copy image address → paste)
+4. Isi nama board Pinterest (harus PERSIS sama kayak nama board yang ada di akun Pinterest kamu)
+5. Pilih jadwal tanggal & jam
+6. Klik **Jadwalkan Post**
+7. Server bakal otomatis kirim ke Make.com pas waktunya, Make.com yang publish ke Pinterest
 
-## 🌐 Deploy ke Production (biar jalan 24/7 walau laptop mati)
-Rekomendasi: **Render.com** (free tier tersedia) atau **Railway.app**
-1. Push folder ini ke GitHub repo
-2. Connect repo ke Render/Railway → set environment variables yang sama seperti `.env`
-3. Update `PINTEREST_REDIRECT_URI` dan `BASE_URL` ke domain production kamu
-4. Update juga Redirect URI di dashboard Pinterest App-nya
+## Soal limit Make.com
 
-## 🔧 Pengembangan Lanjutan (opsional)
-- Ganti `services/db.js` (JSON file) ke database beneran (Postgres/MongoDB) kalau volume posting udah tinggi
-- Tambah AI image generation di `services/` untuk variasi gambar selain foto Shopee asli
-- Tambah multi-user + auth kalau mau dipakai tim
-- Tambah analytics: track CTR dari link Shopee affiliate (Shopee Affiliate dashboard sudah nyediain data klik & konversi)
+Free plan Make.com: ~1.000 operasi/bulan (realistis ~500 post/bulan karena tiap post makan ~2 operasi: trigger + action). Buat 10 post/hari (300/bulan), ini masih jauh cukup, gratis.
 
-## 📌 Batasan Pinterest API yang perlu kamu tau
-- Rate limit berlaku per app (cek dashboard developer Pinterest untuk limit terbaru)
-- Trial access biasanya dibatasi jumlah request/hari — kalau mau scale, ajukan **Standard Access** lewat app review
+## Deploy ke Railway (biar jalan 24/7)
+
+1. Push folder ini ke GitHub
+2. Railway → New Project → Deploy from GitHub repo
+3. Isi environment variables yang sama kayak di `.env`
+4. Generate domain di Settings → Networking

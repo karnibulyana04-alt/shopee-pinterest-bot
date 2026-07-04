@@ -83,13 +83,6 @@
         opacity: 0.5;
         cursor: not-allowed;
       }
-      .row {
-        display: flex;
-        gap: 10px;
-      }
-      .row > * {
-        flex: 1;
-      }
       img.preview {
         max-width: 100%;
         border-radius: 8px;
@@ -122,10 +115,10 @@
         align-items: center;
         gap: 10px;
       }
-      .connect-banner {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
+      .hint {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 4px;
       }
     </style>
   </head>
@@ -133,16 +126,9 @@
     <div class="wrap">
       <h1>🛍️ Shopee → 📌 Pinterest Auto Poster</h1>
       <p class="sub">
-        Generate gambar + caption dari link affiliate Shopee, lalu auto-schedule
-        ke Pinterest pakai API resmi.
+        Generate gambar + caption dari link affiliate Shopee, lalu jadwalkan —
+        dieksekusi otomatis lewat Make.com.
       </p>
-
-      <div class="card connect-banner">
-        <div id="connectStatus">Mengecek koneksi Pinterest...</div>
-        <a href="/auth/pinterest"
-          ><button id="connectBtn">Connect Pinterest</button></a
-        >
-      </div>
 
       <div class="card">
         <label>Link Affiliate Shopee</label>
@@ -160,9 +146,12 @@
         <button id="generateBtn">✨ Generate Gambar & Caption</button>
 
         <div id="previewArea" style="display: none; margin-top: 16px">
-          <label>Preview Gambar</label>
-          <img id="previewImg" class="preview" />
-          <label>Kalau scraping gambar gagal, upload manual (image URL):</label>
+          <label>Preview Gambar (dari scraping)</label>
+          <img id="previewImg" class="preview" style="display: none" />
+          <label
+            >Kalau scraping gambar gagal / mau ganti, isi manual (image
+            URL):</label
+          >
           <input
             id="manualImageUrl"
             placeholder="https://..."
@@ -179,8 +168,11 @@
           <label>Caption (bisa diedit)</label>
           <textarea id="captionText"></textarea>
 
-          <label>Board Pinterest</label>
-          <select id="boardSelect"></select>
+          <label>Nama Board Pinterest</label>
+          <input id="boardName" placeholder="Contoh: Fashion Wanita" />
+          <div class="hint">
+            Ketik persis nama board yang udah ada di akun Pinterest kamu.
+          </div>
 
           <label>Jadwal Posting</label>
           <input id="scheduleAt" type="datetime-local" />
@@ -200,27 +192,6 @@
     <script>
       const $ = (id) => document.getElementById(id);
       let currentImage = null;
-
-      async function checkStatus() {
-        const r = await fetch('/api/status');
-        const data = await r.json();
-        $('connectStatus').textContent = data.connected
-          ? '✅ Pinterest terkoneksi'
-          : '⚠️ Belum connect Pinterest';
-        $('connectBtn').style.display = data.connected
-          ? 'none'
-          : 'inline-block';
-        if (data.connected) loadBoards();
-      }
-
-      async function loadBoards() {
-        const r = await fetch('/api/boards');
-        if (!r.ok) return;
-        const boards = await r.json();
-        $('boardSelect').innerHTML = boards
-          .map((b) => `<option value="${b.id}">${b.name}</option>`)
-          .join('');
-      }
 
       function updateManualPreview() {
         const url = $('manualImageUrl').value.trim();
@@ -264,17 +235,17 @@
 
       $('scheduleBtn').onclick = async () => {
         const imageUrl = $('manualImageUrl').value.trim() || currentImage;
-        const boardId = $('boardSelect').value;
+        const boardName = $('boardName').value.trim();
         const scheduledAt = $('scheduleAt').value;
         if (!imageUrl)
           return alert(
             'Gambar wajib ada (scraping gagal? isi manual image URL)'
           );
-        if (!boardId) return alert('Pilih board dulu / connect Pinterest dulu');
+        if (!boardName) return alert('Isi nama board Pinterest dulu');
         if (!scheduledAt) return alert('Isi jadwal posting');
 
         const body = {
-          boardId,
+          boardName,
           title: $('titleInput').value.trim(),
           caption: $('captionText').value.trim(),
           link: $('shopeeLink').value.trim(),
@@ -304,7 +275,7 @@
       <div class="list-item">
         <div>
           <div><strong>${p.title || '(tanpa judul)'}</strong></div>
-          <div style="color:var(--muted)">${new Date(p.scheduledAt).toLocaleString('id-ID')}</div>
+          <div style="color:var(--muted)">${new Date(p.scheduledAt).toLocaleString('id-ID')} · ${p.boardName || ''}</div>
         </div>
         <div>
           <span class="badge ${p.status}">${p.status}</span>
@@ -320,7 +291,6 @@
         loadSchedule();
       }
 
-      checkStatus();
       loadSchedule();
       setInterval(loadSchedule, 15000);
     </script>
