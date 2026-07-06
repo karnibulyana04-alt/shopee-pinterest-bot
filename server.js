@@ -113,7 +113,7 @@ cron.schedule('* * * * *', async () => {
     try {
       await axios.post(webhookUrl, {
         board_name: post.boardName,
-        title: post.title,
+        title: (post.title || '').slice(0, 100),
         description: post.caption,
         link: post.link,
         image_url: post.imageUrl,
