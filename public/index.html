@@ -120,6 +120,17 @@
         color: var(--muted);
         margin-top: 4px;
       }
+      .preset-row {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+      button.small {
+        padding: 6px 12px;
+        font-size: 12px;
+        border-radius: 16px;
+      }
     </style>
   </head>
   <body>
@@ -168,14 +179,55 @@
           <label>Caption (bisa diedit)</label>
           <textarea id="captionText"></textarea>
 
-          <label>Nama Board Pinterest</label>
-          <input id="boardName" placeholder="Contoh: Fashion Wanita" />
+          <label>Board Pinterest</label>
+          <select id="boardName">
+            <option value="1109926339355662227">Fashion Wanita</option>
+            <option value="1109926339355657771">Outfit</option>
+            <option value="1109926339355657855">Quick Saves</option>
+          </select>
           <div class="hint">
-            Ketik persis nama board yang udah ada di akun Pinterest kamu.
+            Kalau nanti bikin board baru, minta ID-nya ditambahin ke daftar ini.
           </div>
 
           <label>Jadwal Posting</label>
           <input id="scheduleAt" type="datetime-local" />
+          <div class="preset-row">
+            <button
+              type="button"
+              class="secondary small"
+              onclick="setPreset(1)"
+            >
+              +1 jam
+            </button>
+            <button
+              type="button"
+              class="secondary small"
+              onclick="setPreset(2)"
+            >
+              +2 jam
+            </button>
+            <button
+              type="button"
+              class="secondary small"
+              onclick="setPreset(3)"
+            >
+              +3 jam
+            </button>
+            <button
+              type="button"
+              class="secondary small"
+              onclick="setPresetTomorrow(8)"
+            >
+              Besok 08:00
+            </button>
+            <button
+              type="button"
+              class="secondary small"
+              onclick="setPresetTomorrow(19)"
+            >
+              Besok 19:00
+            </button>
+          </div>
 
           <div style="margin-top: 14px">
             <button id="scheduleBtn">📅 Jadwalkan Post</button>
@@ -184,8 +236,19 @@
       </div>
 
       <div class="card">
-        <h3 style="margin-top: 0">Antrian Jadwal</h3>
-        <div id="scheduleList"></div>
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <h3 style="margin: 0">Antrian Jadwal</h3>
+          <button class="secondary small" onclick="clearPosted()">
+            🧹 Hapus yang sudah posted
+          </button>
+        </div>
+        <div id="scheduleList" style="margin-top: 12px"></div>
       </div>
     </div>
 
@@ -201,6 +264,23 @@
         } else {
           img.style.display = 'none';
         }
+      }
+
+      function toLocalInputValue(date) {
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+      }
+
+      function setPreset(hoursFromNow) {
+        const d = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
+        $('scheduleAt').value = toLocalInputValue(d);
+      }
+
+      function setPresetTomorrow(hour) {
+        const d = new Date();
+        d.setDate(d.getDate() + 1);
+        d.setHours(hour, 0, 0, 0);
+        $('scheduleAt').value = toLocalInputValue(d);
       }
 
       $('generateBtn').onclick = async () => {
@@ -269,7 +349,7 @@
         const list = await r.json();
         $('scheduleList').innerHTML =
           list
-            .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
             .map(
               (p) => `
       <div class="list-item">
@@ -288,6 +368,13 @@
 
       async function deletePost(id) {
         await fetch('/api/schedule/' + id, { method: 'DELETE' });
+        loadSchedule();
+      }
+
+      async function clearPosted() {
+        if (!confirm("Hapus semua jadwal yang statusnya sudah 'posted'?"))
+          return;
+        await fetch('/api/schedule/clear-posted', { method: 'DELETE' });
         loadSchedule();
       }
 
